@@ -20,13 +20,13 @@ src/models/dynamic_fusion.py     quality-aware softmax gating + classifier, abla
 src/data/make_splits.py          pair-level 70/10/20 split + leave-one-engine-out splits
 src/utils/metrics.py             ACC / AUC / AP / EER / P / R / F1, markdown tables
 notebooks/00_setup_and_havic_baseline.ipynb   Colab: download, verify weights, HAVIC zero-shot baseline
-third_party/HAVIC                official HAVIC code (git clone, not committed)
+(HAVIC code is cloned on Colab by the notebook, not stored here)
 ```
 
 ## Changes from the blueprint, and why
 | Blueprint | Implemented | Reason |
 |---|---|---|
-| HAVIC features are 512-d | 3072-d (`HAVIC_FT` final_feat = 4×768), projected inside the fusion | This is the real dimension in `third_party/HAVIC/src/models/HAVIC.py`. |
+| HAVIC features are 512-d | 3072-d (`HAVIC_FT` final_feat = 4×768), projected inside the fusion | This is the real dimension in HAVIC's `src/models/HAVIC.py`. |
 | Cache all branch embeddings | Cache HAVIC features and emotion embeddings; for the frequency branch, cache **face crops** (K frames, uint8) | The frequency CNN is trainable, so it needs pixels. Grad-CAM needs pixels too. |
 | Cache the emotion mismatch scalar | Cache the raw SER and FER embeddings; train the 64-d projections jointly | Untrained projections would give a random score. |
 | Random 70/10/20 split | Split by real/fake **pair**, stratified by engine | Each real clip has a matching `_generated` fake. A per-clip split would leak. |
