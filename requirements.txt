@@ -1,0 +1,7 @@
+torch
+numpy
+pandas
+scikit-learn
+pytest
+# Colab-only (feature caching):
+# transformers decord ffmpeg-python einops timm huggingface_hub
