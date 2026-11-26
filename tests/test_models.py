@@ -102,3 +102,14 @@ def test_fill_missing_boxes():
     assert n == 3 and [b[0] for b in boxes] == [1, 1, 1, 5, 5]
     with pytest.raises(ValueError):
         fill_missing_boxes([None, None])
+
+
+@pytest.mark.parametrize("mode", ["havic", "havic_freq", "havic_emo", "full"])
+def test_truthshield_modes(mode):
+    from src.models.truthshield import TruthShield
+    m = TruthShield(mode, d_model=32, freq_width=8)
+    out = m(torch.randn(2, 3072), torch.randint(0, 255, (2, 2, 3, 224, 224), dtype=torch.uint8),
+            torch.randn(2, 768), torch.randn(2, 768), torch.randn(2, 4))
+    assert out["logits"].shape == (2,) and out["weights"].shape == (2, 3)
+    assert (m.freq is None) == ("freq" not in m.active) and (m.emo is None) == ("emotion" not in m.active)
+    out["logits"].sum().backward()

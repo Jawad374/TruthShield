@@ -82,13 +82,30 @@ def load_havic(havic_root: str, weights: str, device: str):
 
 
 # ----------------------------------------------------------------------------- per clip
-def decode(row: dict):
-    """CPU part (runs in a background thread): frames + audio."""
+def recompress(src: str, crf: int, tmp_dir: str) -> str:
+    """Simulate social-media re-upload: H.264 re-encode at the given CRF (higher = worse)."""
+    import subprocess
+    import uuid
+
+    dst = os.path.join(tmp_dir, f"{uuid.uuid4().hex}.mp4")
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", src, "-c:v", "libx264",
+                    "-crf", str(crf), "-preset", "veryfast", "-c:a", "aac", "-b:a", "64k", dst], check=True)
+    return dst
+
+
+def decode(row: dict, crf: int = 0, tmp_dir: str = "/tmp"):
+    """CPU part (runs in a background thread): frames + audio (+ optional re-compression)."""
     from src.data.video_preprocessor import load_audio_16k, sample_frames
 
-    frames, n_tp, dur = sample_frames(row["abs_path"])
-    wav = load_audio_16k(row["abs_path"])
-    return frames, n_tp, dur, wav
+    path = recompress(row["abs_path"], crf, tmp_dir) if crf else row["abs_path"]
+    try:
+        frames, n_tp, dur = sample_frames(path)
+        wav = load_audio_16k(path)
+        size = os.path.getsize(path)
+    finally:
+        if crf and os.path.exists(path):
+            os.remove(path)
+    return frames, n_tp, dur, wav, size
 
 
 @torch.no_grad()
@@ -96,7 +113,7 @@ def process(row, decoded, det, havic, havic_feats, emo, args):
     from src.data.video_preprocessor import (crops_to_tensor, fill_missing_boxes, havic_batches,
                                              pick_k, quality_features)
 
-    frames, n_tp, dur, wav = decoded
+    frames, n_tp, dur, wav, file_bytes = decoded
     boxes, n_missing = fill_missing_boxes([det.detect(f) for f in frames])
     faces = crops_to_tensor(frames, boxes)  # [N,3,224,224] uint8
 
@@ -123,7 +140,7 @@ def process(row, decoded, det, havic, havic_feats, emo, args):
         "faces": k_faces,
         "face_emb": f["face_emb"].half(), "face_probs": f["face_probs"],
         "voice_emb": v["voice_emb"].half(), "voice_probs": v["voice_probs"],
-        "quality": quality_features(faces, boxes, os.path.getsize(row["abs_path"]), dur, wav),
+        "quality": quality_features(faces, boxes, file_bytes, dur, wav),
         "label": int(row["label"]), "engine": row["engine"], "pair_id": row["pair_id"],
         "video_path": row["video_path"], "n_windows": int(video.shape[0]), "n_missing_faces": int(n_missing),
     }
@@ -141,6 +158,10 @@ def run_cache(args):
 
     with open(args.split_csv, newline="") as fh:
         rows = list(csv.DictReader(fh))
+    if args.only_split:
+        rows = [r for r in rows if r["split"] == args.only_split]
+    if args.engines:
+        rows = [r for r in rows if r["engine"] in args.engines]
     if args.shard:
         i, n = map(int, args.shard.split("/"))
         rows = rows[i::n]
@@ -163,10 +184,11 @@ def run_cache(args):
     # decode the next few videos on CPU threads while the GPU works on the current one
     ahead = args.workers + 1
     pool = ThreadPoolExecutor(max_workers=args.workers)
-    futures = {j: pool.submit(decode, todo[j]) for j in range(min(ahead, len(todo)))}
+    dec = lambda r: decode(r, args.crf, args.tmp_dir)  # noqa: E731
+    futures = {j: pool.submit(dec, todo[j]) for j in range(min(ahead, len(todo)))}
     for i, row in enumerate(todo):
         if i + ahead < len(todo):
-            futures[i + ahead] = pool.submit(decode, todo[i + ahead])
+            futures[i + ahead] = pool.submit(dec, todo[i + ahead])
         try:
             decoded = futures.pop(i).result()
             rec = process(row, decoded, det, havic, havic_feats, emo, args)
@@ -244,6 +266,10 @@ def main():
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--limit", type=int, default=0, help="only process N clips (smoke test)")
     ap.add_argument("--shard", default="", help="e.g. 0/2 to split work across sessions")
+    ap.add_argument("--engines", nargs="+", help="only these generators (cache in parts, e.g. --engines sora2)")
+    ap.add_argument("--only_split", default="", help="only rows of this split (e.g. test)")
+    ap.add_argument("--crf", type=int, default=0, help="re-encode with H.264 at this CRF first (robustness test)")
+    ap.add_argument("--tmp_dir", default="/tmp")
     ap.add_argument("--fp32", action="store_true", help="disable fp16 autocast for HAVIC (slower, exact)")
     ap.add_argument("--pack", action="store_true")
     ap.add_argument("--debug", action="store_true")

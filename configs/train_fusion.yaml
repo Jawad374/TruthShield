@@ -1,0 +1,16 @@
+# TruthShield fusion training (all ablation modes share these settings)
+epochs: 30
+patience: 6              # early stopping on validation AUC
+batch_size: 32
+lr: 3.0e-4               # fusion + emotion head
+lr_freq: 1.0e-3          # frequency CNN (trained from scratch)
+weight_decay: 1.0e-2
+dropout: 0.3
+d_model: 256
+freq_width: 32
+use_dwt: true
+n_faces_train: 4         # random face crops per clip per step (of the 8 cached)
+n_faces_eval: 8
+num_workers: 2
+amp: true                # mixed precision on GPU
+seeds: [0, 1, 2]         # every result is reported as mean ± std over these
