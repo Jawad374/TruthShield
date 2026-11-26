@@ -18,8 +18,11 @@ src/models/frequency_branch.py   FFT + Haar DWT -> 4-stage residual CNN -> 128-d
 src/models/emotion_branch.py     frozen SER/FER extractors + trainable 64-d cosine mismatch head (Prompt 2)
 src/models/dynamic_fusion.py     quality-aware softmax gating + classifier, ablation masks (Prompt 3)
 src/data/make_splits.py          pair-level 70/10/20 split + leave-one-engine-out splits
+src/data/video_preprocessor.py   HAVIC-identical frame/face/audio preprocessing (GPU face detection)
+cache_features.py                one-time, resumable caching of all branch inputs (Prompt 4)
 src/utils/metrics.py             ACC / AUC / AP / EER / P / R / F1, markdown tables
 notebooks/00_setup_and_havic_baseline.ipynb   Colab: download, verify weights, HAVIC zero-shot baseline
+notebooks/01_cache_features.ipynb             Colab: run cache_features.py on all 3,810 clips, then pack
 (HAVIC code is cloned on Colab by the notebook, not stored here)
 ```
 

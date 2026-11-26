@@ -73,3 +73,32 @@ def test_pair_split_no_leakage(tmp_path):
     df = split_pairs(load_index(str(tmp_path)))
     assert (df.groupby("pair_id")["split"].nunique() == 1).all()
     assert set(df["split"]) == {"train", "val", "test"}
+
+
+def test_window_plan_matches_havic_official():
+    from src.data.video_preprocessor import window_plan
+
+    def official(nf, tp, ns, W=16, S=2):  # transcription of HAVIC sliding_window_infer.py
+        n = nf - ((nf - W) % S)
+        nwin = (n - W) // S + 1
+        total = int((n / tp) * ns)
+        seg = int((total * W) / (W + S * (nwin - 1)))
+        st = int((S / W) * seg)
+        b = []
+        for i in range(nwin):
+            s, e = i * st, i * st + seg
+            if e > total:
+                e, s = total, max(0, total - seg)
+            b.append((int(s), int(e)))
+        return n, list(range(0, n - W + 1, S)), b
+
+    for nf, tp, ns, s in [(50, 50, 160000, 2), (47, 61, 97000, 2), (16, 16, 16000, 2), (33, 40, 250000, 4)]:
+        assert window_plan(nf, tp, ns, stride=s) == official(nf, tp, ns, S=s)
+
+
+def test_fill_missing_boxes():
+    from src.data.video_preprocessor import fill_missing_boxes
+    boxes, n = fill_missing_boxes([None, (1, 1, 2, 2), None, None, (5, 5, 6, 6)])
+    assert n == 3 and [b[0] for b in boxes] == [1, 1, 1, 5, 5]
+    with pytest.raises(ValueError):
+        fill_missing_boxes([None, None])
